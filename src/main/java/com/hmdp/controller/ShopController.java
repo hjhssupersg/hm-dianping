@@ -7,9 +7,16 @@ import com.hmdp.dto.Result;
 import com.hmdp.entity.Shop;
 import com.hmdp.service.IShopService;
 import com.hmdp.utils.SystemConstants;
+import org.springframework.data.geo.Distance;
+import org.springframework.data.geo.GeoResult;
+import org.springframework.data.geo.GeoResults;
+import org.springframework.data.redis.connection.RedisGeoCommands;
 import org.springframework.web.bind.annotation.*;
 
 import javax.annotation.Resource;
+import java.util.*;
+
+import static com.hmdp.utils.RedisConstants.SHOP_GEO_KEY;
 
 /**
  * <p>
@@ -96,4 +103,5 @@ public class ShopController {
         // 返回数据
         return Result.ok(page.getRecords());
     }
+
 }

@@ -1,5 +1,6 @@
 package com.hmdp.service.impl;
 
+import cn.hutool.core.util.BooleanUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
 import com.hmdp.dto.Result;
@@ -7,13 +8,19 @@ import com.hmdp.entity.Shop;
 import com.hmdp.mapper.ShopMapper;
 import com.hmdp.service.IShopService;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
+import com.hmdp.utils.CacheClient;
 import com.hmdp.utils.RedisConstants;
+import com.hmdp.utils.RedisData;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import javax.annotation.Resource;
+import java.time.LocalDateTime;
 import java.util.concurrent.TimeUnit;
+
+import static com.hmdp.utils.RedisConstants.CACHE_SHOP_KEY;
+import static com.hmdp.utils.RedisConstants.CACHE_SHOP_TTL;
 
 /**
  * <p>
@@ -28,6 +35,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
 
     @Resource
     private StringRedisTemplate stringRedisTemplate;
+    @Resource
+    private CacheClient cacheClient;
 
     /**
      * 根据id查询商铺信息
@@ -36,31 +45,22 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
      */
     @Override
     public Result queryById(Long id) {
-        String key = RedisConstants.CACHE_SHOP_KEY + id;
-        //根据id从redis中查询商铺信息
-        String shopJson = stringRedisTemplate.opsForValue().get(key);
-        //若存在，直接返回
-        if (StrUtil.isNotBlank(shopJson)) {
-            Shop shop = JSONUtil.toBean(shopJson, Shop.class);
-            return Result.ok(shop);
-        }
-        //若为空值，返回错误信息
-        if (shopJson != null) {
-            return Result.fail("店铺信息不存在！");
-        }
-        //若不存在，从数据库查询
-        Shop shop = getById(id);
-        //不存在，报错
+        // 解决缓存穿透
+        Shop shop = cacheClient
+                .queryWithPassThrough(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES);
+
+        // 互斥锁解决缓存击穿
+        // Shop shop = cacheClient
+        //         .queryWithMutex(CACHE_SHOP_KEY, id, Shop.class, this::getById, CACHE_SHOP_TTL, TimeUnit.MINUTES);
+
+        // 逻辑过期解决缓存击穿
+        // Shop shop = cacheClient
+        //         .queryWithLogicalExpire(CACHE_SHOP_KEY, id, Shop.class, this::getById, 20L, TimeUnit.SECONDS);
+
         if (shop == null) {
-            //将空值写入redis，防止缓存穿透
-            stringRedisTemplate.opsForValue().set(key, "",
-                    RedisConstants.CACHE_NULL_TTL, TimeUnit.MINUTES);
             return Result.fail("店铺不存在！");
         }
-        //存在，将查询到的商铺信息写入redis并设置过期时间
-        stringRedisTemplate.opsForValue().set(key, JSONUtil.toJsonStr(shop),
-                RedisConstants.CACHE_SHOP_TTL, TimeUnit.MINUTES);
-        //返回
+        // 7.返回
         return Result.ok(shop);
     }
 
@@ -81,7 +81,8 @@ public class ShopServiceImpl extends ServiceImpl<ShopMapper, Shop> implements IS
         //根据id在数据库更新商铺信息
         updateById(shop);
         //删除redis中的商铺信息
-        stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + shop.getId());
+        stringRedisTemplate.delete(RedisConstants.CACHE_SHOP_KEY + id);
         return Result.ok(shop);
     }
+
 }

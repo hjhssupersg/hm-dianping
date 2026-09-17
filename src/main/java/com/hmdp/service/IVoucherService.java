@@ -14,7 +14,16 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface IVoucherService extends IService<Voucher> {
 
+    /**
+     * 查询店铺的优惠券列表
+     * @param shopId
+     * @return
+     */
     Result queryVoucherOfShop(Long shopId);
 
+    /**
+     * 新增秒杀券
+     * @param voucher
+     */
     void addSeckillVoucher(Voucher voucher);
 }

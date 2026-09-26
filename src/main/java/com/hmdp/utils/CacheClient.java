@@ -18,9 +18,7 @@ import static com.hmdp.utils.RedisConstants.CACHE_NULL_TTL;
 import static com.hmdp.utils.RedisConstants.LOCK_SHOP_KEY;
 
 /**
- * Redis 通用缓存工具类，封装缓存读写与三种经典缓存问题的查询模式：
- * 缓存穿透（{@link #queryWithPassThrough}）、缓存击穿
- * （{@link #queryWithMutex} 互斥锁方案、{@link #queryWithLogicalExpire} 逻辑过期方案）。
+ * Redis 缓存工具类：封装缓存读写，以及穿透（缓存空值）、击穿（互斥锁、逻辑过期）两种查询方案
  */
 @Slf4j
 @Component
@@ -31,7 +29,7 @@ public class CacheClient {
     private static final ExecutorService CACHE_REBUILD_EXECUTOR = Executors.newFixedThreadPool(10);
 
     /**
-     * 构造方法，注入 Redis 操作模板。
+     * 注入 Redis 操作模板
      *
      * @param stringRedisTemplate Redis 字符串操作模板
      */
@@ -40,7 +38,7 @@ public class CacheClient {
     }
 
     /**
-     * 将对象序列化为 JSON 后写入缓存，并设置物理过期时间（TTL）。
+     * 序列化为 JSON 写入缓存，并设置 TTL
      *
      * @param key   缓存键
      * @param value 要缓存的对象
@@ -52,9 +50,8 @@ public class CacheClient {
     }
 
     /**
-     * 将对象包装为 {@link RedisData} 后写入缓存，并设置逻辑过期时间。
-     * <p>缓存本身不设置物理过期时间，由查询方通过 {@link RedisData#getExpireTime()}
-     * 判断数据是否过期，适用于配合 {@link #queryWithLogicalExpire} 的热点数据预热。</p>
+     * 包装为 {@link RedisData} 写入缓存，只设逻辑过期时间、不设物理 TTL
+     * 需先预热缓存，配合 {@link #queryWithLogicalExpire} 使用
      *
      * @param key   缓存键
      * @param value 要缓存的对象
@@ -71,20 +68,18 @@ public class CacheClient {
     }
 
     /**
-     * 基于"缓存空值"策略的查询方法，用于解决缓存穿透问题。
-     * <p>命中有效缓存直接返回；命中空值（数据库中不存在的数据的空标记）时
-     * 直接返回 {@code null}，不再回源数据库；缓存未命中时回源数据库查询，
-     * 查询结果为空则写入短 TTL 的空值标记，否则写入缓存并返回。</p>
+     * 缓存空值方案，解决缓存穿透：数据库不存在的 id 写入短 TTL 空值标记，
+     * 后续请求直接返回 null，不再回源数据库
      *
      * @param keyPrefix  缓存键前缀，实际键为 {@code keyPrefix + id}
      * @param id         业务数据主键
-     * @param type       返回数据的类型，用于 JSON 反序列化
-     * @param dbFallback 缓存未命中时的数据库回退查询函数
+     * @param type       返回数据类型，用于 JSON 反序列化
+     * @param dbFallback 缓存未命中时的数据库查询函数
      * @param time       缓存过期时间数值
      * @param unit       缓存过期时间单位
      * @param <R>        返回数据类型
      * @param <ID>       主键类型
-     * @return 查询到的对象；数据不存在时返回 {@code null}
+     * @return 查询到的对象；数据不存在返回 {@code null}
      */
     public <R,ID> R queryWithPassThrough(
             String keyPrefix, ID id, Class<R> type, Function<ID, R> dbFallback, Long time, TimeUnit unit){
@@ -117,19 +112,18 @@ public class CacheClient {
     }
 
     /**
-     * 基于"互斥锁"策略的查询方法，用于解决缓存击穿问题，同时兼顾缓存穿透防护。
-     * <p>缓存未命中时通过 Redis 分布式锁（SET NX EX）保证同一时间只有一个线程
-     * 回源数据库并重建缓存，其余线程休眠后重试，直到缓存重建完成。</p>
+     * 互斥锁方案，解决缓存击穿：缓存未命中时用分布式锁保证只有一个线程
+     * 回源数据库重建缓存，其余线程休眠后重试
      *
      * @param keyPrefix  缓存键前缀，实际键为 {@code keyPrefix + id}
      * @param id         业务数据主键
-     * @param type       返回数据的类型，用于 JSON 反序列化
-     * @param dbFallback 缓存未命中时的数据库回退查询函数
+     * @param type       返回数据类型，用于 JSON 反序列化
+     * @param dbFallback 缓存未命中时的数据库查询函数
      * @param time       缓存过期时间数值
      * @param unit       缓存过期时间单位
      * @param <R>        返回数据类型
      * @param <ID>       主键类型
-     * @return 查询到的对象；数据不存在时返回 {@code null}
+     * @return 查询到的对象；数据不存在返回 {@code null}
      */
     public <R, ID> R queryWithMutex(
             String keyPrefix, ID id, Class<R> type, Function<ID, R> dbFallback, Long time, TimeUnit unit) {
@@ -181,22 +175,19 @@ public class CacheClient {
     }
 
     /**
-     * 基于"逻辑过期"策略的查询方法，用于解决缓存击穿问题。
-     * <p>缓存数据通过 {@link RedisData#getExpireTime()} 判断是否逻辑过期。
-     * 已过期时仅有一个线程获取互斥锁并在独立线程池中异步重建缓存，
-     * 所有请求仍立即返回旧数据，以短暂的数据一致性换取高可用与高性能。</p>
-     * <p>注意：该方法不会主动回源数据库，缓存未命中时直接返回 {@code null}，
-     * 使用前需通过 {@link #setWithLogicalExpire} 提前预热缓存。</p>
+     * 逻辑过期方案，解决缓存击穿：发现数据逻辑过期后，抢到锁的线程异步重建缓存，
+     * 请求立即返回旧数据，不回源数据库，缓存未命中直接返回 null，需先用
+     * {@link #setWithLogicalExpire} 预热缓存
      *
      * @param keyPrefix  缓存键前缀，实际键为 {@code keyPrefix + id}
      * @param id         业务数据主键
-     * @param type       返回数据的类型，用于 JSON 反序列化
-     * @param dbFallback 逻辑过期后异步重建缓存所使用的数据库查询函数
+     * @param type       返回数据类型，用于 JSON 反序列化
+     * @param dbFallback 逻辑过期后异步重建缓存的数据库查询函数
      * @param time       逻辑过期时间数值
      * @param unit       逻辑过期时间单位
      * @param <R>        返回数据类型
      * @param <ID>       主键类型
-     * @return 缓存中的对象（可能是已过期的旧数据）；缓存未命中时返回 {@code null}
+     * @return 缓存中的对象（可能已过期）；缓存未命中返回 {@code null}
      */
     public <R, ID> R queryWithLogicalExpire(
             String keyPrefix, ID id, Class<R> type, Function<ID, R> dbFallback, Long time, TimeUnit unit) {
@@ -245,12 +236,10 @@ public class CacheClient {
 
 
     /**
-     * 尝试获取 Redis 分布式锁。
-     * <p>基于 {@code SET key value NX EX 10} 原子命令实现：key 不存在时设置成功
-     * 并返回 {@code true}；锁持有 10 秒后自动过期，防止持锁线程异常时产生死锁。</p>
+     * 尝试获取分布式锁：{@code SET key value NX EX 10}，10 秒自动过期防死锁
      *
      * @param key 锁的键
-     * @return 获取成功返回 {@code true}，锁已被占用返回 {@code false}
+     * @return 获取成功 {@code true}，锁被占用 {@code false}
      */
     private boolean tryLock(String key) {
         Boolean flag = stringRedisTemplate.opsForValue().setIfAbsent(key, "1", 10, TimeUnit.SECONDS);
@@ -258,7 +247,7 @@ public class CacheClient {
     }
 
     /**
-     * 释放 Redis 分布式锁（直接删除锁对应的 key）。
+     * 释放 Redis 分布式锁（直接删除锁对应的 key）
      *
      * @param key 锁的键
      */

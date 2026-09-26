@@ -59,7 +59,8 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         }
         Long userId = UserHolder.getUser().getId();
 
-        //创建锁对象（基于redis实现的分布式锁思想）
+        //创建订单（基于redis实现的分布式锁，确保分布式/集群模式下的线程安全）
+        //创建锁对象
         SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
         //获取锁
         boolean isLock = lock.tryLock(1200);

@@ -5,9 +5,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
 import com.hmdp.entity.Blog;
-import com.hmdp.entity.User;
 import com.hmdp.service.IBlogService;
-import com.hmdp.service.IUserService;
 import com.hmdp.utils.SystemConstants;
 import com.hmdp.utils.UserHolder;
 import org.springframework.web.bind.annotation.*;
@@ -29,8 +27,6 @@ public class BlogController {
 
     @Resource
     private IBlogService blogService;
-    @Resource
-    private IUserService userService;
 
     @PostMapping
     public Result saveBlog(@RequestBody Blog blog) {
@@ -43,12 +39,15 @@ public class BlogController {
         return Result.ok(blog.getId());
     }
 
+    /**
+     * 点赞/取消点赞博文
+     * @param id 博文id
+     * @return 无
+     */
     @PutMapping("/like/{id}")
     public Result likeBlog(@PathVariable("id") Long id) {
-        // 修改点赞数量
-        blogService.update()
-                .setSql("liked = liked + 1").eq("id", id).update();
-        return Result.ok();
+        // 一人一赞/取消赞逻辑交给service处理
+        return blogService.likeBlog(id);
     }
 
     @GetMapping("/of/me")
@@ -63,21 +62,34 @@ public class BlogController {
         return Result.ok(records);
     }
 
+    /**
+     * 查询热门博文列表
+     * @param current 页码
+     * @return 热门博文列表
+     */
     @GetMapping("/hot")
     public Result queryHotBlog(@RequestParam(value = "current", defaultValue = "1") Integer current) {
-        // 根据用户查询
-        Page<Blog> page = blogService.query()
-                .orderByDesc("liked")
-                .page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
-        // 获取当前页数据
-        List<Blog> records = page.getRecords();
-        // 查询用户
-        records.forEach(blog ->{
-            Long userId = blog.getUserId();
-            User user = userService.getById(userId);
-            blog.setName(user.getNickName());
-            blog.setIcon(user.getIcon());
-        });
-        return Result.ok(records);
+        // 分页查询并填充作者信息、是否已赞
+        return blogService.queryHotBlog(current);
+    }
+
+    /**
+     * 根据id查询博文详情
+     * @param id 博文id
+     * @return 博文详情
+     */
+    @GetMapping("/{id}")
+    public Result queryBlogById(@PathVariable("id") Long id) {
+        return blogService.queryBlogById(id);
+    }
+
+    /**
+     * 查询博文点赞排行榜（Top5）
+     * @param id 博文id
+     * @return 点赞用户列表
+     */
+    @GetMapping("/likes/{id}")
+    public Result queryBlogLikes(@PathVariable("id") Long id) {
+        return blogService.queryBlogLikes(id);
     }
 }

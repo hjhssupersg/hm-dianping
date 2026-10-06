@@ -10,6 +10,8 @@ import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.hmdp.utils.RedisIdWorker;
 import com.hmdp.utils.SimpleRedisLock;
 import com.hmdp.utils.UserHolder;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.aop.framework.AopContext;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
@@ -30,11 +32,13 @@ import java.time.LocalDateTime;
 public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, VoucherOrder> implements IVoucherOrderService {
 
     @Resource
+    StringRedisTemplate stringRedisTemplate;
+    @Resource
     private ISeckillVoucherService seckillVoucherService;
     @Resource
     private RedisIdWorker redisIdWorker;
     @Resource
-    StringRedisTemplate stringRedisTemplate;
+    private RedissonClient redissonClient;
 
     /**
      * 秒杀下单优惠券
@@ -61,9 +65,10 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
 
         //创建订单（基于redis实现的分布式锁，确保分布式/集群模式下的线程安全）
         //创建锁对象
-        SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        //SimpleRedisLock lock = new SimpleRedisLock("order:" + userId, stringRedisTemplate);
+        RLock lock = redissonClient.getLock("lock:order" + userId);
         //获取锁
-        boolean isLock = lock.tryLock(1200);
+        boolean isLock = lock.tryLock();
         //若获取锁失败，则返回错误信息
         if (!isLock) {
             return Result.fail("同一用户不能重复下单！");
@@ -99,7 +104,7 @@ public class VoucherOrderServiceImpl extends ServiceImpl<VoucherOrderMapper, Vou
         boolean success = seckillVoucherService.update().
                 setSql("stock = stock - 1").//set stock = stock - 1
                 eq("voucher_id", voucherId).
-                gt("stock", 0).//where voucher_id = ? and stock > 0（"乐观锁"的思想）
+                gt("stock", 0).//where voucher_id = ? and stock > 0（"乐观锁"的思想，防止超卖）
                 update();
         if (!success) {
             return Result.fail("库存不足！");

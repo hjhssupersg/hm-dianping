@@ -101,4 +101,22 @@ public class UserController {
         // 返回
         return Result.ok(info);
     }
+
+    /**
+     * 用户签到
+     * @return 无
+     */
+    @PostMapping("/sign")
+    public Result sign(){
+        return userService.sign();
+    }
+
+    /**
+     * 统计本月截止今天的连续签到天数
+     * @return 连续签到天数
+     */
+    @GetMapping("/sign/count")
+    public Result signCount(){
+        return userService.signCount();
+    }
 }

@@ -94,6 +94,24 @@ public class BlogController {
     }
 
     /**
+     * 根据用户id分页查询博文
+     * @param current 页码
+     * @param id 用户id
+     * @return 博文列表
+     */
+    @GetMapping("/of/user")
+    public Result queryBlogByUserId(
+            @RequestParam(value = "current", defaultValue = "1") Integer current,
+            @RequestParam("id") Long id) {
+        // 根据用户分页查询
+        Page<Blog> page = blogService.query()
+                .eq("user_id", id).page(new Page<>(current, SystemConstants.MAX_PAGE_SIZE));
+        // 获取当前页数据
+        List<Blog> records = page.getRecords();
+        return Result.ok(records);
+    }
+
+    /**
      * 查询关注用户的探店博文（滚动分页）
      * @param max 上一次查询的最小时间戳
      * @param offset 上一次查询的最小时间戳对应的偏移量

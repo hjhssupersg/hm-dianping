@@ -41,4 +41,19 @@ public interface IBlogService extends IService<Blog> {
      * @return 点赞用户列表
      */
     Result queryBlogLikes(Long id);
+
+    /**
+     * 保存探店博文并推送到粉丝收件箱
+     * @param blog 博文
+     * @return 博文id
+     */
+    Result saveBlog(Blog blog);
+
+    /**
+     * 查询当前用户关注用户的探店博文（滚动分页）
+     * @param max 上一次查询的最小时间戳（第一次查询传入当前时间戳）
+     * @param offset 上一次查询的最小时间戳对应的偏移量（第一次查询传0）
+     * @return 博文列表
+     */
+    Result queryBlogOfFollow(Long max, Integer offset);
 }

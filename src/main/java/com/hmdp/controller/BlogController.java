@@ -28,15 +28,15 @@ public class BlogController {
     @Resource
     private IBlogService blogService;
 
+    /**
+     * 发布探店博文
+     * @param blog 博文
+     * @return 博文id
+     */
     @PostMapping
     public Result saveBlog(@RequestBody Blog blog) {
-        // 获取登录用户
-        UserDTO user = UserHolder.getUser();
-        blog.setUserId(user.getId());
-        // 保存探店博文
-        blogService.save(blog);
-        // 返回id
-        return Result.ok(blog.getId());
+        // 保存博文并推送到粉丝收件箱
+        return blogService.saveBlog(blog);
     }
 
     /**
@@ -91,5 +91,18 @@ public class BlogController {
     @GetMapping("/likes/{id}")
     public Result queryBlogLikes(@PathVariable("id") Long id) {
         return blogService.queryBlogLikes(id);
+    }
+
+    /**
+     * 查询关注用户的探店博文（滚动分页）
+     * @param max 上一次查询的最小时间戳
+     * @param offset 上一次查询的最小时间戳对应的偏移量
+     * @return 博文列表
+     */
+    @GetMapping("/of/follow")
+    public Result queryBlogOfFollow(
+            @RequestParam("lastId") Long max,
+            @RequestParam(value = "offset", defaultValue = "0") Integer offset) {
+        return blogService.queryBlogOfFollow(max, offset);
     }
 }

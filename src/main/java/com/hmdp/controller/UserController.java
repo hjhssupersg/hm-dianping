@@ -1,9 +1,11 @@
 package com.hmdp.controller;
 
 
+import cn.hutool.core.bean.BeanUtil;
 import com.hmdp.dto.LoginFormDTO;
 import com.hmdp.dto.Result;
 import com.hmdp.dto.UserDTO;
+import com.hmdp.entity.User;
 import com.hmdp.entity.UserInfo;
 import com.hmdp.service.IUserInfoService;
 import com.hmdp.service.IUserService;
@@ -118,5 +120,23 @@ public class UserController {
     @GetMapping("/sign/count")
     public Result signCount(){
         return userService.signCount();
+    }
+
+    /**
+     * 根据id查询用户信息
+     * @param userId 用户id
+     * @return 用户信息
+     */
+    @GetMapping("/{id}")
+    public Result queryUserById(@PathVariable("id") Long userId){
+        // 查询用户
+        User user = userService.getById(userId);
+        if (user == null) {
+            // 用户不存在
+            return Result.ok();
+        }
+        UserDTO userDTO = BeanUtil.copyProperties(user, UserDTO.class);
+        // 返回
+        return Result.ok(userDTO);
     }
 }

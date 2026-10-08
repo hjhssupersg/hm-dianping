@@ -31,3 +31,10 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Nginx 运行时产物 ###
+frontend/logs/*
+!frontend/logs/.gitkeep
+frontend/temp/**
+!frontend/temp/**/
+!frontend/temp/**/.gitkeep
